@@ -1,0 +1,31 @@
+# ===== Python / Django =====
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual Environment
+venv/
+env/
+ENV/
+
+# Django
+db.sqlite3
+*.log
+media/
+staticfiles/
+
+# Environment variables
+.env
+
+# Migrations cache
+**/migrations/__pycache__/
+
+# IDEs
+.vscode/
+.idea/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
