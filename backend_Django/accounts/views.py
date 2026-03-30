@@ -12,7 +12,8 @@ from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.generics import ListAPIView, UpdateAPIView
 from rest_framework_simplejwt.tokens import RefreshToken
-
+from django.core.mail import send_mail
+from django.conf import settings
 from .serializers import (
     LoginSerializer,
     MeSerializer,
@@ -52,6 +53,17 @@ class LoginView(APIView):
                 )
 
         # Generate OTP
+        recent_otp = OTPVerification.objects.filter(
+            roll_no=user.roll_no,
+            purpose="LOGIN",
+            created_at__gte=timezone.now() - timedelta(minutes=1)
+        ).exists()
+
+        if recent_otp:
+            return Response(
+                {"error": "OTP already sent. Try again after 1 minute."},
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
+            )
         otp = str(random.randint(100000, 999999))
         otp_hash = hashlib.sha256(otp.encode()).hexdigest()
 
@@ -69,7 +81,19 @@ class LoginView(APIView):
         )
 
         # DEV ONLY
-        print(f"[LOGIN OTP] {user.roll_no}: {otp}")
+        print(otp)
+        send_mail(
+            subject="Smart Attendance Login OTP",
+            message=f"""
+        Your OTP for login is: {otp}
+
+        This OTP is valid for 5 minutes.
+        Do not share this code with anyone.
+        """,
+            from_email=settings.EMAIL_HOST_USER,
+            recipient_list=[user.email],
+            fail_silently=False,
+        )
 
         return Response(
             {"message": "OTP sent successfully"},
@@ -87,6 +111,10 @@ class VerifyOTPView(APIView):
     def post(self, request):
         roll_no = request.data.get("roll_no")
         otp = request.data.get("otp")
+
+        # ✅ get device info once
+        device_id = request.data.get("device_id")
+        device_model = request.data.get("device_model")
 
         if not roll_no or not otp:
             return Response(
@@ -128,12 +156,39 @@ class VerifyOTPView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        # Enforce approval again (defense layer)
+        # ✅ approval check
         if user.status != "ACTIVE":
             return Response(
                 {"error": "Account not approved"},
                 status=status.HTTP_403_FORBIDDEN,
             )
+
+        # =========================================================
+        # 🔥 DEVICE BINDING ONLY FOR STUDENTS
+        # =========================================================
+
+        if user.role == "STUDENT":
+
+            if not device_id:
+                return Response(
+                    {"error": "Device ID required"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            # FIRST LOGIN → bind device
+            if not user.device_id:
+                user.device_id = device_id
+                user.device_model = device_model
+                user.save()
+
+            # NEXT LOGIN → validate device
+            elif user.device_id != device_id:
+                return Response(
+                    {"error": "Login not allowed from this device"},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
+        # =========================================================
 
         record.delete()
 
@@ -147,7 +202,6 @@ class VerifyOTPView(APIView):
             },
             status=status.HTTP_200_OK,
         )
-
 
 # =========================================
 # LOGOUT (JWT IS STATELESS)
@@ -194,7 +248,7 @@ def me(request):
     })
 
 class RegisterView(APIView):
-
+    permission_classes = [AllowAny]
     def post(self, request):
         serializer = StudentRegistrationSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)

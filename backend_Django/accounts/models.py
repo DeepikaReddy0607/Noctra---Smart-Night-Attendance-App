@@ -57,6 +57,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     roll_no = models.CharField(max_length=20, unique=True)
     email = models.EmailField(unique=True)
+    name = models.CharField(max_length=100)
     phone = models.CharField(max_length=15)
     role = models.CharField(max_length=20, choices=ROLE_CHOICES)
 
@@ -129,3 +130,10 @@ class WardenProfile(models.Model):
 
     def __str__(self):
         return f"{self.user.roll_no} - {self.designation}"
+class EmailOTP(models.Model):
+    email = models.EmailField()
+    otp = models.CharField(max_length=6)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.email

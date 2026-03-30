@@ -1,5 +1,4 @@
-from datetime import timezone
-
+from django.utils import timezone
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
@@ -8,7 +7,8 @@ from attendance.models import Attendance
 from hostel.models import Block, CaretakerDuty
 from .serializers import CaretakerDutySerializer
 from django.contrib.auth import get_user_model
-
+from rest_framework.decorators import api_view, permission_classes
+from hostel.models import CaretakerDuty
 User = get_user_model()
 class AssignCaretakerView(APIView):
 
@@ -22,9 +22,9 @@ class AssignCaretakerView(APIView):
         serializer = CaretakerDutySerializer(data=request.data)
 
         if serializer.is_valid():
-            serializer.save(assigned_by=request.user)
+            serializer.save()
             return Response(serializer.data, status=201)
-
+        print("ERRORS:", serializer.errors)
         return Response(serializer.errors, status=400)
 
 class CaretakerDutyListView(APIView):
@@ -116,7 +116,12 @@ class ChiefWardenDashboardView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-
+        print("\n===== DEBUG START =====")
+        print("HEADERS:", dict(request.headers))
+        print("AUTH HEADER:", request.headers.get("Authorization"))
+        print("USER:", request.user)
+        print("AUTH:", request.auth)
+        print("===== DEBUG END =====\n")
         if request.user.role != "CHIEF_WARDEN":
             return Response({"error": "Unauthorized"}, status=403)
 
@@ -133,7 +138,7 @@ class ChiefWardenDashboardView(APIView):
         absent = total_students - present
 
         # Violations
-        left_block = attendance_today.filter(left_block=True).count()
+        left_block = attendance_today.filter(movement_state="LEFT").count()
 
         data = {
             "total_students": total_students,
@@ -161,12 +166,12 @@ class BlockWiseStatsView(APIView):
 
             total_students = User.objects.filter(
                 role="STUDENT",
-                studentprofile__block=block
+                student_profile__block=block
             ).count()
 
             attendance = Attendance.objects.filter(
                 date=today,
-                student__studentprofile__block=block
+                student__student_profile__block=block
             )
 
             present = attendance.filter(status="PRESENT").count()
@@ -194,9 +199,103 @@ class ViolationSummaryView(APIView):
         attendance = Attendance.objects.filter(date=today)
 
         data = {
-            "late": attendance.filter(status="LATE").count(),
-            "left_block": attendance.filter(left_block=True).count(),
-            "absent": attendance.filter(status="ABSENT").count(),
+            "late": attendance.filter(status="LATE").values("student__roll_no"),
+            "left_block": attendance.filter(movement_state="LEFT").values("student__roll_no"),
+            "absent": attendance.filter(status="ABSENT").values("student__roll_no"),
         }
 
         return Response(data)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_caretakers(request):
+    caretakers = User.objects.filter(role="CARETAKER")
+
+    data = [
+        {
+            "id": c.id,
+            "name": c.roll_no,
+        }
+        for c in caretakers
+    ]
+
+    return Response(data)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_assignments(request):
+    assignments = CaretakerDuty.objects.all()
+
+    data = [
+        {
+            "caretaker_name": a.caretaker.roll_no,
+            "block": a.block,
+            "date": str(a.date),
+        }
+        for a in assignments
+    ]
+
+    return Response(data)
+
+from rest_framework.views import APIView
+
+class CaretakerListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        caretakers = User.objects.filter(role="CARETAKER")
+
+        data = [
+            {
+                "id": c.id,
+                "name": c.roll_no,
+            }
+            for c in caretakers
+        ]
+
+        return Response(data)
+
+class ActivateStudentView(APIView):
+    def post(self, request, pk):
+        student = User.objects.filter(id=pk).first()
+
+        if not student:
+            return Response({"error": "Not found"}, status=404)
+        student.status = "Active"
+        student.is_approved = True
+        student.save()
+
+        return Response({"message": "Approved"})
+    
+class StudentListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if request.user.role != "CHIEF_WARDEN":
+            return Response({"error": "Unauthorized"}, status=403)
+
+        students = User.objects.filter(role="STUDENT")
+
+        data = [
+            {
+                "id": str(s.id),   # UUID → string
+                "name": s.username,
+                "roll_no": getattr(s, "roll_no", ""),
+                "status": s.status
+            }
+            for s in students
+        ]
+
+        return Response(data)
+    
+class RejectStudentView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        try:
+            student = User.objects.get(pk=pk, role="STUDENT")
+            student.status = "Reject"
+            student.save()
+            return Response({"message": "Rejected"})
+        except User.DoesNotExist:
+            return Response({"error": "Not found"}, status=404)

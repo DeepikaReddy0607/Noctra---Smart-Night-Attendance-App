@@ -73,20 +73,26 @@ class StudentRegistrationSerializer(serializers.Serializer):
 # LOGIN
 # ==========================
 
+from django.contrib.auth.hashers import check_password
+from .models import User
+
 class LoginSerializer(serializers.Serializer):
     roll_no = serializers.CharField(max_length=20)
     password = serializers.CharField(write_only=True)
 
     def validate(self, data):
-        user = authenticate(
-            roll_no=data["roll_no"],
-            password=data["password"]
-        )
+        roll_no = data["roll_no"]
+        password = data["password"]
 
-        if not user:
-            raise serializers.ValidationError("Invalid credentials")
+        try:
+            user = User.objects.get(roll_no=roll_no)
+        except User.DoesNotExist:
+            raise serializers.ValidationError("Invalid roll number")
 
-        if user.status != "ACTIVE":
+        if not user.check_password(password):
+            raise serializers.ValidationError("Invalid password")
+
+        if user.status.strip().upper() != "ACTIVE":
             raise serializers.ValidationError("Account not approved yet")
 
         if not user.is_active:
@@ -94,8 +100,6 @@ class LoginSerializer(serializers.Serializer):
 
         data["user"] = user
         return data
-
-
 # ==========================
 # CURRENT USER
 # ==========================
@@ -104,8 +108,10 @@ class MeSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = (
+            "id",
             "roll_no",
             "email",
+            "name",
             "phone",
             "role",
             "status",
