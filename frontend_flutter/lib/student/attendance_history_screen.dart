@@ -49,7 +49,7 @@ class _AttendanceHistoryScreenState
       case "ABSENT":
         return Colors.red.shade100;
       default:
-        return Colors.grey.shade200;
+        return Colors.black;
     }
   }
 

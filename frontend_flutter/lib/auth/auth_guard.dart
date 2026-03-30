@@ -6,6 +6,7 @@ import '../student/student_dashboard.dart';
 import '../caretaker/caretaker_dashboard.dart';
 import '../admin/admin_dashboard.dart';
 import '../blockwarden/blockwarden_dashboard.dart';
+import '../cheif_warden/cheif_warden_home.dart';
 
 class AuthGuard extends StatelessWidget {
   const AuthGuard({super.key});
@@ -76,7 +77,7 @@ class AuthGuard extends StatelessWidget {
 
                 // CHIEF WARDEN / ADMIN
                 if (role == "CHIEF_WARDEN") {
-                  return const AdminDashboard();
+                  return  ChiefWardenHome(token: token!);
                 }
 
                 // fallback

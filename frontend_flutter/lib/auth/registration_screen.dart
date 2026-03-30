@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import 'package:smart_night_attendance/main.dart';
-
+import 'login_screen.dart';
 class RegistrationScreen extends StatefulWidget {
   const RegistrationScreen({super.key});
 
@@ -16,8 +16,9 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   final TextEditingController passwordController = TextEditingController();
   final TextEditingController roomController = TextEditingController();
   final TextEditingController phoneController = TextEditingController();
-  final TextEditingController cotController = TextEditingController(); // ✅ NEW
-
+  final TextEditingController cotController = TextEditingController();
+  String? statusMessage;
+bool? isSuccess;
   bool isLoading = false;
 
   String? selectedBlock;
@@ -45,78 +46,58 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     passwordController.dispose();
     roomController.dispose();
     phoneController.dispose();
-    cotController.dispose(); // ✅
+    cotController.dispose();
     super.dispose();
   }
 
-  Future<void> _register() async {
-    if (rollController.text.isEmpty ||
-        emailController.text.isEmpty ||
-        passwordController.text.isEmpty ||
-        roomController.text.isEmpty ||
-        phoneController.text.isEmpty ||
-        cotController.text.isEmpty ||
-        selectedBlock == null ||
-        selectedYear == null) {
-      _showError("All fields are required");
-      return;
-    }
-
-    setState(() => isLoading = true);
-
-    try {
-      final result = await AuthService.register(
-        rollNo: rollController.text.trim(),
-        email: emailController.text.trim(),
-        password: passwordController.text.trim(),
-        phone: phoneController.text.trim(),
-        block: selectedBlock!,
-        roomNumber: roomController.text.trim(),
-        cotNumber: cotController.text.trim(),
-        year: years[selectedYear!]!, // convert label → value
-      ).timeout(const Duration(seconds: 10));
-
-      if (!mounted) return;
-      print("STATUS: ${result["status"]}");
-      print("BODY: ${result["body"]}");
-      if (result["status"] == 201) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content:
-                Text("Registration successful. Awaiting admin approval."),
-          ),
-        );
-        Navigator.pop(context);
-      } else {
-        final body = result["body"];
-        String message = "Registration failed";
-
-        if (body is Map) {
-          message = body.entries
-            .map((e) => "${e.key}: ${e.value}")
-            .join("\n");
-        }
-
-        _showError(message);
-      }
-    } on TimeoutException {
-      if(!mounted) return;
-      _showError("Server not reachable. Check network.");
-    } catch (e) {
-      if(!mounted) return;
-      _showError("Error: $e");
-    } finally {
-      if (mounted) {
-        setState(() => isLoading = false);
-      }
-    }
+  
+Future<Map<String, dynamic>> _register() async {
+  if (rollController.text.isEmpty ||
+      emailController.text.isEmpty ||
+      passwordController.text.isEmpty ||
+      roomController.text.isEmpty ||
+      phoneController.text.isEmpty ||
+      cotController.text.isEmpty ||
+      selectedBlock == null ||
+      selectedYear == null) {
+    return {"ok": false, "msg": "All fields are required"};
   }
+  if (!mounted) return {"ok": false, "msg": "Screen disposed"};
+  setState(() => isLoading = true);
+
+  try {
+    final result = await AuthService.register(
+      rollNo: rollController.text.trim(),
+      email: emailController.text.trim(),
+      password: passwordController.text.trim(),
+      phone: phoneController.text.trim(),
+      block: selectedBlock!,
+      roomNumber: roomController.text.trim(),
+      cotNumber: cotController.text.trim(),
+      year: years[selectedYear!]!,
+    ).timeout(const Duration(seconds: 10));
+
+    return {
+      "ok": result["status"] == 201,
+      "msg": result["status"] == 201
+          ? "Registration successful"
+          : "Registration failed"
+    };
+  } on TimeoutException {
+    return {"ok": false, "msg": "Server not reachable"};
+  } catch (e) {
+    return {"ok": false, "msg": "Error: $e"};
+  } finally {
+    if (mounted) setState(() => isLoading = false);
+  }
+}
 
   void _showError(String message) {
+    messengerKey.currentState?.clearSnackBars();
     messengerKey.currentState?.showSnackBar(
       SnackBar(content: Text(message)),
     );
-}
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -129,8 +110,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
             children: [
               const Text(
                 "Create Account",
-                style:
-                    TextStyle(fontSize: 22, fontWeight: FontWeight.w600),
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 32),
 
@@ -218,7 +198,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
               const SizedBox(height: 16),
 
               TextField(
-                controller: cotController, // ✅ NEW FIELD
+                controller: cotController,
                 decoration: const InputDecoration(
                   labelText: "Cot Number",
                   border: OutlineInputBorder(),
@@ -231,7 +211,35 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                 width: double.infinity,
                 height: 48,
                 child: ElevatedButton(
-                  onPressed: isLoading ? null : _register,
+                  onPressed: isLoading
+    ? null
+    : () async {
+        setState(() {
+          statusMessage = null;
+        });
+
+        final res = await _register();
+        if (!mounted) return;
+
+        setState(() {
+          statusMessage = res["msg"];
+          isSuccess = res["ok"];
+        });
+
+        // ✅ Auto redirect ONLY if success
+        if (res["ok"] == true) {
+          await Future.delayed(const Duration(seconds: 2));
+
+          if (!mounted) return;
+
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const LoginScreen(),
+            ),
+          );
+        }
+      },
                   child: isLoading
                       ? const CircularProgressIndicator()
                       : const Text("REGISTER"),

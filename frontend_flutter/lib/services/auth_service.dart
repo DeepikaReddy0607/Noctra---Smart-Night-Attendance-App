@@ -2,7 +2,26 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'token_service.dart';
+import 'package:device_info_plus/device_info_plus.dart';
+import 'dart:io';
 
+Future<Map<String, String>> getDeviceInfo() async {
+  final deviceInfo = DeviceInfoPlugin();
+
+  if (Platform.isAndroid) {
+    final android = await deviceInfo.androidInfo;
+
+    return {
+      "device_id": android.id,
+      "device_model": "${android.brand} ${android.model}",
+    };
+  }
+
+  return {
+    "device_id": "unknown",
+    "device_model": "unknown",
+  };
+}
 class AuthService {
 
   // =========================
@@ -60,13 +79,15 @@ class AuthService {
     required String rollNo,
     required String otp,
   }) async {
-
+    final device = await getDeviceInfo();
     final response = await http.post(
       Uri.parse("$authBase/verify-otp/"),
       headers: {"Content-Type": "application/json"},
       body: jsonEncode({
         "roll_no": rollNo,
         "otp": otp,
+        "device_id" : device["device_id"],
+        "device_model": device["device_model"],
       }),
     ).timeout(const Duration(seconds: 10));
 
@@ -166,6 +187,7 @@ class AuthService {
     return _processResponse(response);
   }
 
+
   // =========================
   // RESPONSE HANDLER
   // =========================
@@ -187,4 +209,71 @@ class AuthService {
       };
     }
   }
+// =========================
+// GENERIC API METHODS (TOKEN BASED)
+// =========================
+
+static Future<dynamic> get(String endpoint, String token) async {
+  final response = await http.get(
+    Uri.parse("$baseUrl$endpoint"),
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer $token",
+    },
+  );
+
+  final res = _processResponse(response);
+
+  if (res["status"] == 200) return res["body"];
+  throw Exception(res["body"]);
+}
+
+static Future<dynamic> post(
+    String endpoint, Map body, String token) async {
+  final response = await http.post(
+    Uri.parse("$baseUrl$endpoint"),
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer $token",
+    },
+    body: jsonEncode(body),
+  );
+
+  final res = _processResponse(response);
+
+  if (res["status"] == 200 || res["status"] == 201) return res["body"];
+  throw Exception(res["body"]);
+}
+
+static Future<void> put(
+    String endpoint, Map body, String token) async {
+  final response = await http.put(
+    Uri.parse("$baseUrl$endpoint"),
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer $token",
+    },
+    body: jsonEncode(body),
+  );
+
+  if (response.statusCode != 200) {
+    throw Exception(response.body);
+  }
+}
+
+static Future<void> delete(
+    String endpoint, String token) async {
+  final response = await http.delete(
+    Uri.parse("$baseUrl$endpoint"),
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer $token",
+    },
+  );
+
+  if (response.statusCode != 200 &&
+      response.statusCode != 204) {
+    throw Exception(response.body);
+  }
+}
 }
