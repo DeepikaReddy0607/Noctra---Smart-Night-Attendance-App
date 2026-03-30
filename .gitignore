@@ -1,0 +1,51 @@
+# =========================
+# PYTHON / DJANGO
+# =========================
+__pycache__/
+*.py[cod]
+*.sqlite3
+db.sqlite3
+media/
+staticfiles/
+.env
+.env.*
+*.log
+
+# Virtual Environment
+venv/
+env/
+ENV/
+.venv/
+
+# Migrations cache
+*/migrations/*.pyc
+
+# =========================
+# FLUTTER
+# =========================
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+build/
+.dart_tool/
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+android/.gradle/
+android/app/build/
+
+# =========================
+# IDE
+# =========================
+.idea/
+.vscode/
+*.iml
+
+# =========================
+# OS FILES
+# =========================
+.DS_Store
+Thumbs.db
